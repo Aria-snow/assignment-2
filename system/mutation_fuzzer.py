@@ -39,6 +39,71 @@ def flip_random_character(s):
     # print("Flipping", bit, "in", repr(c) + ", giving", repr(new_c))
     return s[:pos] + new_c + s[pos + 1:]
 
+def replace_sql_token(s: str) -> str:
+    """Token-level replacement:
+       - SQL keyword <-> keyword
+       - numbers -> boundary values
+       - strings / identifiers lightly perturbed
+    """
+    ts = _tok(s)
+    idx = [i for i,t in enumerate(ts) if not t.isspace()]
+    if not idx:
+        return s
+    i = random.choice(idx)
+    t = ts[i]
+    # Keyword swap
+    if t.upper() in _SQL_KW:
+        alt = random.choice(_SQL_KW)
+        ts[i] = alt if t.isupper() else alt.lower()
+    # Integer replacement with boundary-ish values
+    elif re.fullmatch(r"\d+", t):
+        ts[i] = random.choice(["0","-1","1","2147483647","-2147483648","9223372036854775807","-9223372036854775808"])
+    # String literal perturbation
+    elif t.startswith("'") and t.endswith("'"):
+        inner = t[1:-1]
+        if random.random() < 0.5:
+            inner = inner + "A" * random.randint(1, 30)
+        else:
+            if "a" in inner:
+                inner = inner.replace("a", "@", 1)
+            else:
+                inner = inner + "!"
+        ts[i] = "'" + inner + "'"
+    else:
+        # identifier / other: change case or append small suffix
+        if random.random() < 0.5:
+            ts[i] = t + random.choice(["_x","__","0"])
+        else:
+            ts[i] = (t.upper() if t.islower() else t.lower())
+    return _unt(ts)
+
+def duplicate_sql_clause(s: str) -> str:
+    """Pick a SQL keyword token and duplicate it somewhere (simple heuristic)"""
+    ts = _tok(s)
+    idx = [i for i,t in enumerate(ts) if not t.isspace() and t.upper() in _SQL_KW]
+    if not idx:
+        return s
+    i = random.choice(idx)
+    t = ts[i]
+    insert_pos = random.randint(0, len(ts))
+    ts.insert(insert_pos, t + " ")
+    return _unt(ts)
+
+def shuffle_sql_tokens(s: str) -> str:
+    """Shuffle a small contiguous span of non-whitespace tokens"""
+    ts = _tok(s)
+    idx = [i for i,t in enumerate(ts) if not t.isspace()]
+    if len(idx) < 2:
+        return s
+    start = random.randint(0, len(idx) - 2)
+    end = random.randint(start + 1, len(idx) - 1)
+    segment_idx = idx[start:end+1]
+    segment = [ts[i] for i in segment_idx]
+    random.shuffle(segment)
+    for j,k in enumerate(segment_idx):
+        ts[k] = segment[j]
+    return _unt(ts)
+
 class MyMutationFuzzer(Fuzzer):
     """Base class for mutational fuzzing"""
 
